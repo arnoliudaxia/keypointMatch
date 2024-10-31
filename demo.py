@@ -23,7 +23,7 @@ import numpy as np
 import omniglue
 from omniglue import utils
 from PIL import Image
-
+import cv2
 
 def main(argv) -> None:
   if len(argv) != 3:
@@ -50,7 +50,7 @@ def main(argv) -> None:
   )
   print(f"> \tTook {time.time() - start} seconds.")
 
-  # Perform inference.
+  #! Perform inference.
   print("> Finding matches...")
   start = time.time()
   match_kp0, match_kp1, match_confidences = og.FindMatches(image0, image1)
@@ -70,6 +70,38 @@ def main(argv) -> None:
   match_kp1 = match_kp1[keep_idx]
   match_confidences = match_confidences[keep_idx]
   print(f"> \tFound {num_filtered_matches}/{num_matches} above threshold {match_threshold}")
+  
+  # 使用 RANSAC 方法计算基础矩阵 F 和 mask
+  F, mask = cv2.findFundamentalMat(match_kp0, match_kp1, method=cv2.RANSAC)
+  # 打印基础矩阵
+  print("Fundamental Matrix (F):")
+  print(F)
+  
+  # 使用 mask 过滤出内点（inliers），即通过 RANSAC 验证的匹配点
+  inlier_kp0 = match_kp0[mask.ravel() == 1]
+  inlier_kp1 = match_kp1[mask.ravel() == 1]
+
+  print(f"Number of inliers: {len(inlier_kp0)}/{len(match_kp0)}")
+
+  # 可视化过滤后的匹配
+  import matplotlib.pyplot as plt
+
+  def visualize_matches(img1, img2, kp0, kp1):
+      fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+      ax.imshow(np.hstack((img1, img2)), cmap='gray')
+      for i in range(len(kp0)):
+          pt1 = kp0[i]
+          pt2 = kp1[i]
+          pt2_shifted = (pt2[0] + img1.shape[1], pt2[1])  # 第二张图像的点向右平移
+          ax.plot([pt1[0], pt2_shifted[0]], [pt1[1], pt2_shifted[1]], 'r-', lw=1)
+          ax.scatter(*pt1, s=20, c='yellow')
+          ax.scatter(*pt2_shifted, s=20, c='yellow')
+      plt.axis('off')
+      plt.imsave("res/1.png",fig)
+    
+  visualize_matches(image0, image1, inlier_kp0, inlier_kp1)
+    
+  return
 
   # Visualize.
   print("> Visualizing matches...")
